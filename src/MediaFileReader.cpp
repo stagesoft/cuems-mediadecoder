@@ -26,7 +26,12 @@ bool MediaFileReader::open(const std::string& path, const std::string& format) {
 
     // Prepare format options if specified
     AVDictionary* formatOpts = nullptr;
+    // FFmpeg 4.0+ (58.x) changed return type to const AVInputFormat*
+#if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(58, 0, 0)
+    const AVInputFormat* inputFormat = nullptr;
+#else
     AVInputFormat* inputFormat = nullptr;
+#endif
     
     if (!format.empty()) {
         inputFormat = av_find_input_format(format.c_str());

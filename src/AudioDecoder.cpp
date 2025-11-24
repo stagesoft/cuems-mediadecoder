@@ -85,7 +85,8 @@ int AudioDecoder::receiveFrame(AVFrame* frame) {
 }
 
 void AudioDecoder::flush() {
-    if (codecCtx_ && codecCtx_->codec && codecCtx_->codec->flush) {
+    // codec->flush was removed in FFmpeg 4.0+, but avcodec_flush_buffers() is always available
+    if (codecCtx_) {
         avcodec_flush_buffers(codecCtx_);
     }
 }
