@@ -138,16 +138,36 @@ SwrContext* AudioDecoder::createSwrContextExplicit(int outChannels,
 #if LIBSWRESAMPLE_VERSION_INT >= AV_VERSION_INT(4, 7, 100)
     // FFmpeg 5.1+ API with AVChannelLayout
     AVChannelLayout outChLayout;
+    AVChannelLayout inChLayout;
+    
     av_channel_layout_default(&outChLayout, outChannels);
+    
+    // Handle unknown/unspecified input channel layout (like mpv does)
+    if (codecCtx_->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC || 
+        codecCtx_->ch_layout.nb_channels == 0) {
+        // Channel layout is unknown, use default layout for channel count
+        int inChannels;
+        #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(59, 0, 0)
+            inChannels = codecCtx_->ch_layout.nb_channels;
+        #else
+            inChannels = codecCtx_->channels;
+        #endif
+        av_channel_layout_default(&inChLayout, inChannels);
+    } else {
+        av_channel_layout_copy(&inChLayout, &codecCtx_->ch_layout);
+    }
 
     // Create resampler context
     int ret = swr_alloc_set_opts2(&swrCtx,
                                   &outChLayout, outSampleFmt, outSampleRate,
-                                  &codecCtx_->ch_layout, codecCtx_->sample_fmt, codecCtx_->sample_rate,
+                                  &inChLayout, codecCtx_->sample_fmt, codecCtx_->sample_rate,
                                   0, nullptr);
 
+    // Clean up temporary channel layouts
+    av_channel_layout_uninit(&outChLayout);
+    av_channel_layout_uninit(&inChLayout);
+    
     if (ret < 0 || !swrCtx) {
-        av_channel_layout_uninit(&outChLayout);
         return nullptr;
     }
 
@@ -155,11 +175,8 @@ SwrContext* AudioDecoder::createSwrContextExplicit(int outChannels,
     ret = swr_init(swrCtx);
     if (ret < 0) {
         swr_free(&swrCtx);
-        av_channel_layout_uninit(&outChLayout);
         return nullptr;
     }
-
-    av_channel_layout_uninit(&outChLayout);
 #else
     // FFmpeg 4.x/5.0 API with channel_layout (uint64_t)
     uint64_t outChannelLayout = av_get_default_channel_layout(outChannels);
