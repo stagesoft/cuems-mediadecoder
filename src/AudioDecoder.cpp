@@ -46,6 +46,15 @@ bool AudioDecoder::openCodec(AVCodecParameters* codecParams) {
         return false;
     }
 
+    // Enable multi-threaded decoding (helps with complex audio codecs)
+    codecCtx_->thread_count = 0;  // Auto-detect optimal thread count
+    if (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS) {
+        codecCtx_->thread_type |= FF_THREAD_FRAME;
+    }
+    if (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) {
+        codecCtx_->thread_type |= FF_THREAD_SLICE;
+    }
+
     // Open codec
     ret = avcodec_open2(codecCtx_, codec, nullptr);
     if (ret < 0) {
