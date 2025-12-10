@@ -50,22 +50,24 @@ bool VideoDecoder::openCodec(AVCodecParameters* codecParams, AVCodecContext* cod
         }
 
         // Enable multi-threaded decoding for software codecs
-        // This is critical for CPU-intensive codecs like AV1, VP9, HEVC
-        // thread_count = 0 means auto-detect optimal number (typically = CPU cores)
-        codecCtx_->thread_count = 0;
-        
-        // Use both frame and slice threading for maximum parallelism
-        // FF_THREAD_FRAME: Decode multiple frames in parallel
-        // FF_THREAD_SLICE: Decode multiple slices of a single frame in parallel
-        if (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS) {
-            codecCtx_->thread_type |= FF_THREAD_FRAME;
-        }
-        if (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) {
-            codecCtx_->thread_type |= FF_THREAD_SLICE;
-        }
-        // If codec doesn't advertise threading, still try auto-threading
-        if (codecCtx_->thread_type == 0) {
-            codecCtx_->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+        // EXCEPTION: AV1 (libdav1d) has issues with threading - disable it completely
+        if (codecParams->codec_id == AV_CODEC_ID_AV1) {
+            // AV1/libdav1d: No threading to avoid seek/flush issues
+            codecCtx_->thread_count = 1;
+            codecCtx_->thread_type = 0;
+        } else {
+            // Other codecs: Use full multi-threading for performance
+            codecCtx_->thread_count = 0;  // Auto-detect optimal thread count
+            if (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS) {
+                codecCtx_->thread_type |= FF_THREAD_FRAME;
+            }
+            if (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) {
+                codecCtx_->thread_type |= FF_THREAD_SLICE;
+            }
+            // If codec doesn't advertise threading, still try auto-threading
+            if (codecCtx_->thread_type == 0) {
+                codecCtx_->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+            }
         }
 
         // Open codec
