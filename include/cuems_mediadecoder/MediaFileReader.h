@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: LGPL-3.0-or-later
+ * SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
  *
  * Copyright (C) 2020-2026 Stage Lab Coop.
  * Author: Ion Reguera <ion@stagelab.coop>
@@ -85,6 +86,19 @@ public:
     bool isReady() const;
 
     /**
+     * Reason the last open() failed, as reported by FFmpeg.
+     *
+     * open() collapses several distinct FFmpeg failures into a single false,
+     * which makes a failed load undiagnosable from the log alone (a partially
+     * synced file, an unsupported container and a permissions problem all look
+     * identical). This carries the av_strerror() text plus which FFmpeg call
+     * produced it, so callers can log a cause instead of just "failed".
+     *
+     * @return Human-readable cause, or an empty string if open() succeeded.
+     */
+    const std::string& getLastError() const { return lastError_; }
+
+    /**
      * Find a stream of the specified type
      * @param mediaType Stream type (AVMEDIA_TYPE_VIDEO, AVMEDIA_TYPE_AUDIO, etc.)
      * @return Stream index, or -1 if not found
@@ -158,9 +172,13 @@ public:
     unsigned int getStreamCount() const;
 
 private:
+    /** Build "<call> failed: <av_strerror text> (<file>, <size> bytes)" into lastError_. */
+    void recordError(const char* call, int averr);
+
     AVFormatContext* formatCtx_;
     std::string currentFile_;
     bool ready_;
+    std::string lastError_;
 };
 
 } // namespace cuems_mediadecoder
