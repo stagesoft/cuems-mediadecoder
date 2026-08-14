@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: LGPL-3.0-or-later
+ * SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
  *
  * Copyright (C) 2020-2026 Stage Lab Coop.
  * Author: Ion Reguera <ion@stagelab.coop>
@@ -23,7 +24,29 @@
 #include "cuems_mediadecoder/MediaFileReader.h"
 #include "cuems_mediadecoder/FFmpegUtils.h"
 
+#include <sys/stat.h>
+
 namespace cuems_mediadecoder {
+
+void MediaFileReader::recordError(const char* call, int averr) {
+    char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+    av_strerror(averr, errbuf, sizeof(errbuf));
+
+    lastError_ = std::string(call) + " failed: " + errbuf;
+
+    // The on-disk size is the single most useful extra fact here: a media file
+    // that is still being copied/rsynced reads as a valid path with a plausible
+    // prefix but no trailing moov atom, and FFmpeg reports only "Invalid data
+    // found when processing input". Printing the size lets an operator compare
+    // against the source and spot a partial file immediately.
+    struct stat st{};
+    if (stat(currentFile_.c_str(), &st) == 0) {
+        lastError_ += " (" + currentFile_ + ", " +
+                      std::to_string(static_cast<long long>(st.st_size)) + " bytes)";
+    } else {
+        lastError_ += " (" + currentFile_ + ", size unavailable)";
+    }
+}
 
 MediaFileReader::MediaFileReader()
     : formatCtx_(nullptr)
@@ -45,6 +68,7 @@ bool MediaFileReader::open(const std::string& path, const std::string& format) {
 
     currentFile_ = path;
     ready_ = false;
+    lastError_.clear();
 
     // Prepare format options if specified
     AVDictionary* formatOpts = nullptr;
@@ -72,6 +96,7 @@ bool MediaFileReader::open(const std::string& path, const std::string& format) {
     }
     
     if (ret < 0) {
+        recordError("avformat_open_input", ret);
         formatCtx_ = nullptr;
         return false;
     }
@@ -79,6 +104,7 @@ bool MediaFileReader::open(const std::string& path, const std::string& format) {
     // Retrieve stream information
     ret = avformat_find_stream_info(formatCtx_, nullptr);
     if (ret < 0) {
+        recordError("avformat_find_stream_info", ret);
         avformat_close_input(&formatCtx_);
         formatCtx_ = nullptr;
         return false;
