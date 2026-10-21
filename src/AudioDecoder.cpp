@@ -1,3 +1,4 @@
+// SPDX-FileContributor: Ion Reguera <ion@stagelab.coop>
 #include "cuems_mediadecoder/AudioDecoder.h"
 #include "cuems_mediadecoder/FFmpegUtils.h"
 #include <cstring>
@@ -137,8 +138,11 @@ SwrContext* AudioDecoder::createSwrContextExplicit(int outChannels,
 
 #if LIBSWRESAMPLE_VERSION_INT >= AV_VERSION_INT(4, 7, 100)
     // FFmpeg 5.1+ API with AVChannelLayout
-    AVChannelLayout outChLayout;
-    AVChannelLayout inChLayout;
+    // Zero-initialised: av_channel_layout_copy() uninits its destination first, so an
+    // uninitialised layout whose garbage reads as AV_CHANNEL_ORDER_CUSTOM got its bogus
+    // u.map free()d (the player aborted at arm on MP3/Vorbis/Opus, 869ejxng3 step 7 T7-7).
+    AVChannelLayout outChLayout = {};
+    AVChannelLayout inChLayout = {};
     
     av_channel_layout_default(&outChLayout, outChannels);
     
